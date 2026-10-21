@@ -1,4 +1,4 @@
-local hookedBars = {}
+local colorHooks = {}
 
 local function GetUnitColor(unit)
     if UnitIsPlayer(unit) then
@@ -13,7 +13,28 @@ local function GetUnitColor(unit)
     return UnitSelectionColor(unit)
 end
 
-local function SetupClassColor(frame, unit)
+local function HookAndApply(object, method, apply)
+    if not colorHooks[object] then
+        local applying = false
+
+        local function Update()
+            if applying then
+                return
+            end
+
+            applying = true
+            apply()
+            applying = false
+        end
+
+        colorHooks[object] = Update
+        hooksecurefunc(object, method, Update)
+    end
+
+    colorHooks[object]()
+end
+
+local function ColorUnitFrame(frame, unit)
     local bar = frame and frame.healthbar
     local name = frame and frame.name
 
@@ -21,62 +42,109 @@ local function SetupClassColor(frame, unit)
         return
     end
 
-    if hookedBars[bar] then
-        hookedBars[bar]()
-        return
-    end
-
-    local applyingColor = false
-
-    local function ApplyColor()
-        if applyingColor or not UnitExists(unit) then
+    HookAndApply(bar, "SetStatusBarColor", function()
+        if not UnitExists(unit) then
             return
         end
 
         local r, g, b = GetUnitColor(unit)
 
-        applyingColor = true
         bar:SetStatusBarDesaturated(true)
         bar:SetStatusBarColor(r, g, b)
         name:SetText(UnitName(unit))
         name:SetTextColor(r, g, b)
-        applyingColor = false
+    end)
+end
+
+local function ColorNameplate(unit)
+    local plate = C_NamePlate.GetNamePlateForUnit(unit)
+
+    if not plate then
+        return
     end
 
-    hookedBars[bar] = ApplyColor
-    hooksecurefunc(bar, "SetStatusBarColor", ApplyColor)
-    ApplyColor()
+    local frame = plate.UnitFrame
+
+    if not frame then
+        return
+    end
+
+    local bar = frame.healthBar
+    local name = frame.name
+
+    if not name then
+        return
+    end
+
+    HookAndApply(name, "SetVertexColor", function()
+        local currentUnit = frame.unit
+
+        if not currentUnit
+            or not UnitExists(currentUnit)
+            or not UnitIsPlayer(currentUnit) then
+            return
+        end
+
+        name:SetVertexColor(GetUnitColor(currentUnit))
+    end)
+
+    if bar and UnitIsPlayer(unit) then
+        bar:SetStatusBarDesaturated(true)
+        bar:SetStatusBarColor(GetUnitColor(unit))
+    end
+end
+
+local function UpdatePlayer()
+    ColorUnitFrame(PlayerFrame, "player")
+end
+
+local function UpdateTarget()
+    ColorUnitFrame(TargetFrame, "target")
+    ColorUnitFrame(TargetFrameToT, "targettarget")
+end
+
+local function UpdateFocus()
+    ColorUnitFrame(FocusFrame, "focus")
+    ColorUnitFrame(FocusFrameToT, "focustarget")
+end
+
+local function UpdateTargetTarget()
+    ColorUnitFrame(TargetFrameToT, "targettarget")
+
+end
+
+local function UpdateFocusTarget()
+    ColorUnitFrame(FocusFrameToT, "focustarget")
 end
 
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_LOGIN")
 events:RegisterEvent("PLAYER_TARGET_CHANGED")
 events:RegisterEvent("PLAYER_FOCUS_CHANGED")
+events:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 events:RegisterUnitEvent("UNIT_TARGET", "target", "focus")
 
 events:SetScript("OnEvent", function(self, event, unit)
     if event == "PLAYER_LOGIN" then
-        SetupClassColor(PlayerFrame, "player")
-        SetupClassColor(TargetFrame, "target")
-        SetupClassColor(FocusFrame, "focus")
-        SetupClassColor(TargetFrameToT, "targettarget")
-        SetupClassColor(FocusFrameToT, "focustarget")
-
+        UpdatePlayer()
+        UpdateTarget()
+        UpdateFocus()
         self:UnregisterEvent(event)
 
     elseif event == "PLAYER_TARGET_CHANGED" then
-        SetupClassColor(TargetFrame, "target")
-        SetupClassColor(TargetFrameToT, "targettarget")
+        UpdateTarget()
 
     elseif event == "PLAYER_FOCUS_CHANGED" then
-        SetupClassColor(FocusFrame, "focus")
-        SetupClassColor(FocusFrameToT, "focustarget")
+        UpdateFocus()
+
+    elseif event == "NAME_PLATE_UNIT_ADDED" then
+        ColorNameplate(unit)
 
     elseif event == "UNIT_TARGET" then
         if unit == "target" then
-            SetupClassColor(TargetFrameToT, "targettarget")
+            UpdateTargetTarget()
         elseif unit == "focus" then
-            SetupClassColor(FocusFrameToT, "focustarget")
+            UpdateFocusTarget()
         end
     end
 end)
