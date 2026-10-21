@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Version: 1.0.0
-## Title: Wow class color
+## Title: Wow Class Color
 ## Notes: Addon to show class colors on nameplates and target frames
 ## Author: Axelton
 
